@@ -128,3 +128,126 @@ void Network::print_traj(const int time, const std::map<std::string, size_t> &_n
             }
     (*_out) << std::endl;
 }
+
+
+
+
+////////////////////////////////////////////////////////
+
+
+/*
+ Finds the list of neurons with incoming connections to \p n.
+  \param n : the index of the receiving neuron.
+  \return a vector of pairs {neuron index, link intensity}.
+*/
+std::vector<std::pair<size_t, double> > Network::neighbors(const size_t& n) const
+{
+	///on regarde dans tableau links tous les neurones connectés à n
+	///on les ajoute à vector qu'on retourne
+	
+	///typedef std::map<std::pair<size_t, size_t>, double> linkmap;
+	///map<pair<neurone1, neurone2>, intensité>, neurone1 reçoit intensité de neurone2
+	std::vector<std::pair<size_t, double> > voisins;
+	std::pair<size_t, double> voisin;
+	
+	///links.begin() pas bonne option parce qu'on parcourt toute la liste de neurones --> trop long, mieux links.lower_bound()
+	///cend au lieu de end quand fn const
+	///pour marquer la fin : l'indice change, on passe à autre neurone dans links
+	for(auto i = links.lower_bound({n, 0}); i != links.cend() and (i->first).first == n; ++i)
+	{
+		voisin.first = (i->first).second;
+		voisin.second = i->second;
+		voisins.push_back(voisin);
+	}
+	
+	return voisins;
+}
+
+
+/*
+Calculates the number and total intensity of connections to neuron \p n.
+  \param n : the index of the receiving neuron.
+  \return a pair {number of connections, sum of link intensities}.
+*/
+
+std::pair<size_t, double> Network::degree(const size_t& n) const
+{
+	std::pair<size_t, double> intensite;
+	double sommeIntensites(0.0);
+	
+	///on doit appeler fn neighbors pour voir neurones connectés, prendre leur intensité, additionner
+	///tableau de size_t,double
+	for(size_t i=0 ; i<neighbors(n).size() ; ++i)
+	{
+		sommeIntensites += neighbors(n)[i].second;
+	}
+	
+	intensite.first = neighbors(n).size();
+	intensite.second = sommeIntensites;
+	
+	return intensite;
+}
+
+
+/*
+Performs one time-step of the simulation.
+  \param input : a vector of random values as thalamic input, one value for each neuron. 
+  * The variance of these values corresponds to excitatory neurons.
+  \return the indices of firing neurons.
+*/
+
+std::set<size_t> Network::step(const std::vector<double>& thalamicInput)
+{
+	///on prend neurones voisins, on regarde si firing ou pas, puis si inhibiteur ou excitateur
+	
+	std::set<size_t> firingNeurons;
+	
+	///on regarde chaque neurone
+	for(size_t i=0; i<neurons.size(); ++i)
+	{
+		std::vector<std::pair<size_t, double> > voisins(neighbors(i));
+		double sommeInhibiteur(0.0);
+		double sommeExcitateur(0.0);
+		
+		///on regarde les voisins du neurone
+		for(size_t j=0; j<voisins.size(); ++j)
+		{
+			///on regarde si voisin est firing
+			if(neurons[voisins[j].first].firing())
+			{
+				///on regarde si voisin firing est inhibiteur
+				if(neurons[voisins[j].first].is_inhibitory())
+				{
+					///on ajoute intensité à somme inhibiteur
+					sommeInhibiteur += voisins[j].second;
+				} else {
+					///on ajoute intensité à somme excitateur
+					sommeExcitateur += voisins[j].second;
+				}
+			}
+		}
+		
+		if(neurons[i].is_inhibitory())
+		{
+			neurons[i].input(thalamicInput[i]*2.0/5.0 + 0.5*sommeExcitateur + sommeInhibiteur);
+		} else {
+			neurons[i].input(thalamicInput[i] + 0.5*sommeExcitateur + sommeInhibiteur);
+		}
+		
+		if(neurons[i].firing())
+		{
+			firingNeurons.insert(i);
+			neurons[i].reset();
+		} else {
+			neurons[i].step();
+		}
+	}
+	
+	return firingNeurons;
+}
+
+
+
+
+
+
